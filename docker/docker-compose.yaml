@@ -1,0 +1,15 @@
+services:
+  balabol:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: balabol
+    image: balabol:latest
+    environment:
+      - TZ=Europe/Moscow       # таймзона контейнера
+    ports:
+      - "9090:9090"            # порт для метрик Prometheus
+    volumes:
+      - ../config:/app/config   # конфигурация и secrets
+      - ../logs:/app/logs       # лог-файлы
+    restart: unless-stopped

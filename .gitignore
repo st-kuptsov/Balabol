@@ -1,0 +1,5 @@
+.idea
+config/config.yaml
+config/secrets.yaml
+logs/
+!pkg/logs/
