@@ -5,8 +5,11 @@ import (
 	"time"
 )
 
+// Метрики Prometheus для Telegram-бота
+
 var (
-	// Количество полученных сообщений
+	// MessagesTotal — общее количество сообщений, полученных ботом
+	// Лейбл "chat_id" позволяет различать сообщения по чатам
 	MessagesTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "bot_messages_total",
@@ -15,7 +18,7 @@ var (
 		[]string{"chat_id"},
 	)
 
-	// Количество отправленных ответов
+	// RepliesTotal — общее количество отправленных ботом ответов
 	RepliesTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "bot_replies_total",
@@ -23,7 +26,7 @@ var (
 		},
 	)
 
-	// Сообщения, на которые не найдено совпадений
+	// NoMatchTotal — количество сообщений, на которые не найдено совпадений с правилами
 	NoMatchTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "bot_messages_no_match_total",
@@ -31,7 +34,8 @@ var (
 		},
 	)
 
-	// Ошибки обработки сообщений или отправки
+	// ErrorsTotal — количество ошибок на разных стадиях обработки сообщений
+	// Лейбл "stage" указывает этап, на котором произошла ошибка
 	ErrorsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "bot_errors_total",
@@ -40,7 +44,8 @@ var (
 		[]string{"stage"},
 	)
 
-	// Количество срабатываний правил
+	// RuleHitsTotal — количество срабатываний каждого правила
+	// Лейбл "rule" хранит текст правила
 	RuleHitsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "bot_rule_hits_total",
@@ -49,16 +54,16 @@ var (
 		[]string{"rule"},
 	)
 
-	// Время обработки одного сообщения
+	// MessageProcessingDuration — гистограмма времени обработки одного сообщения
 	MessageProcessingDuration = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "bot_message_processing_duration_seconds",
 			Help:    "Duration to process one message",
-			Buckets: prometheus.DefBuckets,
+			Buckets: prometheus.DefBuckets, // стандартные интервалы Prometheus
 		},
 	)
 
-	// Время reload конфигурации
+	// ConfigReloadDuration — время выполнения reload конфигурации
 	ConfigReloadDuration = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "bot_config_reload_duration_seconds",
@@ -66,7 +71,7 @@ var (
 		},
 	)
 
-	// Количество reload конфигов
+	// ConfigReloadTotal — количество успешных reload конфигурации
 	ConfigReloadTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "bot_config_reload_total",
@@ -74,7 +79,7 @@ var (
 		},
 	)
 
-	// Ошибки при reload
+	// ConfigReloadErrorsTotal — количество ошибок при reload конфигурации
 	ConfigReloadErrorsTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "bot_config_reload_errors_total",
@@ -83,7 +88,7 @@ var (
 	)
 )
 
-// InitMetrics регистрирует все метрики
+// InitMetrics регистрирует все метрики в Prometheus
 func InitMetrics() {
 	prometheus.MustRegister(
 		MessagesTotal,
@@ -98,7 +103,8 @@ func InitMetrics() {
 	)
 }
 
-// Helper: измерение времени обработки
+// ObserveProcessing измеряет длительность обработки сообщения
+// и обновляет гистограмму MessageProcessingDuration
 func ObserveProcessing(start time.Time) {
 	duration := time.Since(start).Seconds()
 	MessageProcessingDuration.Observe(duration)

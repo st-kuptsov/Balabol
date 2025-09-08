@@ -4,14 +4,22 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/st-kuptsov/balabol/internal/app"
+	"github.com/st-kuptsov/balabol/internal/app" // импорт внутреннего пакета приложения
 )
 
+// Version хранит текущую версию приложения.
+// Значение "dev" используется по умолчанию при локальной разработке.
+// При сборке релиза эту переменную обычно подставляют через ldflags.
 var Version = "dev"
 
+// main — точка входа в приложение.
 func main() {
+	// Запуск основной логики приложения через функцию Run из пакета app.
+	// Передаём в неё текущую версию.
 	if err := app.Run(Version); err != nil {
+		// Если Run возвращает ошибку, выводим её в стандартный поток ошибок.
 		fmt.Fprintf(os.Stderr, "application failed: %v\n", err)
+		// Завершаем приложение с кодом 1 (означает ошибку).
 		os.Exit(1)
 	}
 }

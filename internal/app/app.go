@@ -3,12 +3,12 @@ package app
 import (
 	"errors"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/st-kuptsov/balabol/config"
-	"github.com/st-kuptsov/balabol/internal/telegram"
-	logs "github.com/st-kuptsov/balabol/pkg/logs"
-	"github.com/st-kuptsov/balabol/pkg/metrics"
-	"go.uber.org/zap"
+	"github.com/prometheus/client_golang/prometheus/promhttp" // обработчик метрик Prometheus
+	"github.com/st-kuptsov/balabol/config"                    // работа с конфигурацией
+	"github.com/st-kuptsov/balabol/internal/telegram"         // Telegram-бот
+	logs "github.com/st-kuptsov/balabol/pkg/logs"             // кастомный логгер
+	"github.com/st-kuptsov/balabol/pkg/metrics"               // инициализация метрик
+	"go.uber.org/zap"                                         // структурированное логирование
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,15 +16,19 @@ import (
 	"time"
 )
 
-// Run запускает приложение
+// Run запускает основную логику приложения.
+// version — версия приложения, передается для логирования.
 func Run(version string) error {
+	// Путь к конфигурационному файлу
 	configPath := "config/config.yaml"
 
+	// Загружаем конфиг с контролем хеша (чтобы отслеживать изменения)
 	conf, err := config.LoadConfigWithHash(configPath)
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
+	// Создаём логгер согласно конфигурации
 	logger := logs.DefaultLogger(conf.Config.Logging)
 	logger.Infow("starting balabol",
 		"config", configPath,
@@ -33,63 +37,68 @@ func Run(version string) error {
 		"version", version,
 	)
 
-	// Инициализация метрик
+	// Инициализация метрик Prometheus
 	logger.Debug("initializing metrics server")
-	metrics.InitMetrics()
-	startMetricsServer(conf.Config.ServicePort, logger)
+	metrics.InitMetrics()                               // инициализация метрик приложения
+	startMetricsServer(conf.Config.ServicePort, logger) // запуск HTTP-сервера для метрик
 
 	// Инициализация Telegram-бота
 	logger.Debug("initializing telegram bot")
 	bot, err := telegram.NewBot(
 		conf.Config.Telegram.Token,
 		conf.Config.BotMode,
-		func() []config.Rule { return conf.Config.Rules },
+		conf.Config.CleanFilter,
+		conf.Config.RemoveDup,
+		func() []config.Rule { return conf.Config.Rules }, // ленивый доступ к правилам
+		logger,
 	)
 	if err != nil {
 		return fmt.Errorf("telegram bot init: %w", err)
 	}
 	logger.Info("telegram bot initialized")
 
-	// Запуск бота
+	// Запуск бота в отдельной горутине
 	go bot.Start()
 
-	// канал для остановки
+	// Канал для сигналов остановки приложения
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	// reload конфигурации
+	// Запуск горутины, которая периодически перезагружает конфиг при изменении
 	go reloadConfigLoop(configPath, conf, stop, logger)
 
-	// ожидание сигнала остановки
+	// Основная блокировка: ждем сигнала остановки
 	<-stop
 	logger.Info("shutting down gracefully...")
-	bot.Stop()
+	bot.Stop() // остановка бота
 	return nil
 }
 
-// startMetricsServer запускает HTTP сервер для Prometheus
+// startMetricsServer запускает HTTP-сервер для Prometheus метрик
 func startMetricsServer(port int, logger *zap.SugaredLogger) {
 	go func() {
 		servicePort := fmt.Sprintf(":%d", port)
-		http.Handle("/metrics", promhttp.Handler())
+		http.Handle("/metrics", promhttp.Handler()) // обработчик метрик
 		logger.Infow("metrics server started", "port", servicePort)
+		// Запуск HTTP сервера
 		if err := http.ListenAndServe(servicePort, nil); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Errorw("metrics server failed", "error", err)
 		}
 	}()
 }
 
-// reloadConfigLoop проверяет изменения конфига каждые 5 секунд
+// reloadConfigLoop периодически (каждые 5 секунд) проверяет изменения конфигурации.
+// Если конфиг изменился, логгирует обновление и применяет новые правила.
 func reloadConfigLoop(path string, conf *config.CachedConfig, stop chan os.Signal, logger *zap.SugaredLogger) {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(5 * time.Second) // тикер с интервалом 5 секунд
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-stop:
+		case <-stop: // сигнал на завершение
 			return
-		case <-ticker.C:
-			changed, err := conf.ReloadWithMetrics(path)
+		case <-ticker.C: // тикер срабатывает
+			changed, err := conf.ReloadWithMetrics(path) // проверка и перезагрузка конфига
 			if err != nil {
 				logger.Errorw("config reload failed", "error", err)
 				continue
